@@ -2,7 +2,7 @@
 # This file lists the Python dependencies needed for the Bitcoin examples
 
 # Core Bitcoin utilities library
-bitcoinutils>=1.0.0
+bitcoinutils #pip3 install bitcoin-utils
 
 
 # Note: This project requires a Bitcoin Core node running in regtest mode
