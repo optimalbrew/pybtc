@@ -6,7 +6,7 @@ Merkle Tree Layout:
 #         /        \
 #    Branch0      Branch1  
 #   /      \      /      \
-#S0       S1     S2      S3
+# S0       S1     S2      S3
 Hashlock Multi  CSV     Siglock
 
 This script allows spending from any of the four script paths using the correct ControlBlock and Witness stack.
@@ -122,33 +122,27 @@ def main():
     bob_pub = bob_priv.get_public_key()
 
     scripts, preimage = get_leaf_scripts(alice_pub, bob_pub)
-    #tree = [[scripts[0], scripts[1]], [scripts[2], scripts[3]]]
-    # for debugging .. getting error for multisig i.e. script[1]
-    tree = [[scripts[0], scripts[0]], [scripts[2], scripts[3]]]
+    # hashlock, multisig, csv, siglock
+    tree = [[scripts[0], scripts[1]], [scripts[2], scripts[3]]]
 
     taproot_address = alice_pub.get_taproot_address(tree)
     print("Taproot address:", taproot_address.to_string())
 
-    leaf_index = 3  # Input the index of the script to spend
+    leaf_index = 3
+    # Input the index of the script to spend
     tapleaf_script = scripts[leaf_index]
  
-    ctrl_block = ControlBlock(
-        alice_pub,
-        tree,
-        leaf_index,
-        is_odd=taproot_address.is_odd()
-    )
-
     # Input your UTXO info here
-    input_amount = to_satoshis(.15) #initial amount to fund to p2tr address
-    output_amount = 666
-    fee = 400
-    change_amount = input_amount - output_amount - fee
-    prev_txid, vout = fund_address(taproot_address, .15, proxy, addr)
+    input_amount = 0.15 #initial amount to fund to p2tr address
+    output_amount = 0.10
+    change_amount = 0.0499
+    fee = input_amount - output_amount - change_amount
+    print(f"Input amount: {input_amount} BTC, Output amount: {output_amount} BTC, Change amount: {change_amount}, Fee: {fee} BTC BTC")
+    prev_txid, vout = fund_address(taproot_address, input_amount, proxy, addr)
     
 
     # Input your receiver address here
-    receiver_address = dest_address.to_string()
+    #receiver_address = dest_address.to_string()
     #print(f"Receiver address: {receiver_address}")
 
     # Create transaction inputs and outputs
@@ -157,15 +151,15 @@ def main():
     print(f"Transaction details: {proxy.gettxout(prev_txid, vout)}")
 
     # Create Script objects for both outputs
-    from bitcoinutils.keys import P2trAddress
-    #receiver_script = P2trAddress(receiver_address).to_script_pub_key()
-    receiver_script = dest_address.to_script_pub_key()
-    txout1 = TxOutput(output_amount, receiver_script)
-    txout2 = TxOutput(change_amount, taproot_address.to_script_pub_key())  # change back to same Taproot
+    txout1 = TxOutput(to_satoshis(output_amount), dest_address.to_script_pub_key())
+    txout2 = TxOutput(to_satoshis(change_amount), taproot_address.to_script_pub_key())  # change back to same Taproot
     tx = Transaction([txin], [txout1, txout2], has_segwit=True)
 
     # Handle different script paths based on leaf_index
     if leaf_index == 0:
+        tapleaf_script = scripts[leaf_index]
+        ctrl_block = ControlBlock(alice_pub,tree,leaf_index, is_odd=taproot_address.is_odd())
+
         # Hashlock script path
         preimage_hex = preimage.encode('utf-8').hex()
         witness = TxWitnessInput([
@@ -174,11 +168,13 @@ def main():
             ctrl_block.to_hex()
         ])
     elif leaf_index == 1:
+        tapleaf_script = scripts[leaf_index]
+        ctrl_block = ControlBlock(alice_pub,tree,leaf_index, is_odd=taproot_address.is_odd())
         # Multisig script path
         sigB = bob_priv.sign_taproot_input(
             tx, 0,
             [taproot_address.to_script_pub_key()],
-            [input_amount],
+            [to_satoshis(input_amount)],
             script_path=True,
             tapleaf_script=tapleaf_script,
             tweak=False
@@ -186,7 +182,7 @@ def main():
         sigA = alice_priv.sign_taproot_input(
             tx, 0,
             [taproot_address.to_script_pub_key()],
-            [input_amount],
+            [to_satoshis(input_amount)],
             script_path=True,
             tapleaf_script=tapleaf_script,
             tweak=False
@@ -197,6 +193,8 @@ def main():
             ctrl_block.to_hex()
         ])
     elif leaf_index == 2:
+        tapleaf_script = scripts[leaf_index]
+        ctrl_block = ControlBlock(alice_pub,tree,leaf_index, is_odd=taproot_address.is_odd())
         # CSV timelock script path - need to set sequence
         seq = Sequence(TYPE_RELATIVE_TIMELOCK, 2)
         seq_for_n_seq = seq.for_input_sequence()
@@ -206,7 +204,7 @@ def main():
         sig = bob_priv.sign_taproot_input(
             tx, 0,
             [taproot_address.to_script_pub_key()],
-            [input_amount],
+            [to_satoshis(input_amount)],
             script_path=True,
             tapleaf_script=tapleaf_script,
             tweak=False
@@ -217,11 +215,14 @@ def main():
             ctrl_block.to_hex()
         ])
     elif leaf_index == 3:
+        print("Spending from Siglock script path")
+        tapleaf_script = scripts[leaf_index]
+        ctrl_block = ControlBlock(alice_pub,tree,leaf_index, is_odd=taproot_address.is_odd())
         # Simple siglock script path
         sig = bob_priv.sign_taproot_input(
             tx, 0,
             [taproot_address.to_script_pub_key()],
-            [input_amount],
+            [to_satoshis(input_amount)],
             script_path=True,
             tapleaf_script=tapleaf_script,
             tweak=False
@@ -245,6 +246,8 @@ def main():
         print(f"✅ Transaction broadcast successfully! TXID: {txid}")         
     except Exception as e:
         print(f"\n❌ ERROR: Transaction failed to broadcast: {e}")
+        #Decode the inputs to the raw transaction to inspect it
+        print(f"Decoded transaction:\n{proxy.decoderawtransaction(tx.serialize())}")
 
 if __name__ == "__main__":
     main()
